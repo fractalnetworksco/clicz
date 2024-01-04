@@ -7,7 +7,6 @@ import sys
 import pkg_resources
 import yaml
 
-
 COLORS = {
     "HEADER": "\033[95m",
     "BLUE": "\033[94m",
@@ -33,7 +32,12 @@ class Color:
 class CLICZ:
     default_controller: str
 
-    def __init__(self, cli_module: str = "notectl", autodiscover=True):
+    def __init__(
+        self,
+        cli_module: str = "notectl",
+        description="A CLI brought to you by CLICZ.",
+        autodiscover=True,
+    ):
         """
         Register any controller that has the property `enable_cli=True`
         """
@@ -44,7 +48,7 @@ class CLICZ:
         # epilog = f'Run `{cli_module} <command> --help` for more information.'
         epilog = ""
         # Top-level parser
-        self.parser = argparse.ArgumentParser(epilog=epilog)
+        self.parser = argparse.ArgumentParser(epilog=epilog, description=description)
 
         # the alias_parser allows us to invoke plugin methods directly without having
         # to specify the plugin name itself
@@ -53,7 +57,7 @@ class CLICZ:
         self.alias_parser = self.parser.add_subparsers(
             title="system commands", dest="mgmt_command", metavar="command"
         )
-        self.base_parser = argparse.ArgumentParser(epilog=epilog)
+        self.base_parser = argparse.ArgumentParser(epilog=epilog, description=description)
         self.base_parser.add_argument(
             "-d", "--debug", help="show debug output", action="store_true"
         )
@@ -62,19 +66,7 @@ class CLICZ:
             title="plugin commands", dest="command", required=True, metavar="command"
         )
         if autodiscover:
-            description = self._init_clicz()
-            self.parser.description = description
-            self.base_parser.description = description
-
-    def _init_clicz(self) -> str:
-        """Initialize clicz application
-        ---
-        Args: None
-        Returns: Argparser description
-        """
-        entrypoint = list(pkg_resources.iter_entry_points(f"{self.cli_module}.entrypoint"))[0]
-        clicz_module = entrypoint.load()
-        return clicz_module.clicz_entrypoint(self)
+            self.load_plugins()
 
     def dispatch(self, argv=None):
         """Dispatch a CLI invocation to a controller.
@@ -319,6 +311,15 @@ class CLICZ:
 
             method.get_invocation_args = get_invocation_args
 
+    def load_plugins(
+        self,
+    ):
+        plugins = pkg_resources.iter_entry_points(self.cli_module)
+        for entry_point in plugins:
+            controller_module = entry_point.load()
+            controller = getattr(controller_module, "Controller")
+            self.register_controller(controller)
+
 
 def cli_method(func=None, parse_docstring=True):
     """
@@ -343,22 +344,3 @@ def cli_method(func=None, parse_docstring=True):
     wrapper.parse_docstring = True if parse_docstring else False
     wrapper.cli_method = True
     return wrapper
-
-
-import pkg_resources
-
-
-class PluginManager:
-    @staticmethod
-    def load_plugins(plugin_namespace="fractal.plugins"):
-        plugins = pkg_resources.iter_entry_points(plugin_namespace)
-        loaded_plugins = {}
-        for entry_point in plugins:
-            loaded_plugins[entry_point.name] = entry_point.load()
-
-        return loaded_plugins
-
-
-def clicz_entrypoint(clicz: CLICZ):
-    for _, plugin_module in PluginManager.load_plugins().items():
-        clicz.register_controller(plugin_module.Controller)
