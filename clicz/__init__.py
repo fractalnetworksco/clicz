@@ -3,8 +3,8 @@ import argparse
 import functools
 import inspect
 import sys
+from importlib.metadata import entry_points
 
-import pkg_resources
 import yaml
 
 COLORS = {
@@ -311,10 +311,8 @@ class CLICZ:
 
             method.get_invocation_args = get_invocation_args
 
-    def load_plugins(
-        self,
-    ):
-        plugins = pkg_resources.iter_entry_points(self.cli_module)
+    def load_plugins(self):
+        plugins = entry_points(group=self.cli_module)
         for entry_point in plugins:
             controller_module = entry_point.load()
             controller = getattr(controller_module, "Controller")
